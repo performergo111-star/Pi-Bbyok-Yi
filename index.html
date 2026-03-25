@@ -107,8 +107,7 @@
             justify-content: center;
             gap: 20px;
             pointer-events: none;
-            /* setupGrid에서 계산된 startY 값에 맞춰 JS에서 동적으로 위치 조정 예정이나, 기본적으로 중앙 상단 배치 */
-            top: 80px; 
+            top: 60px; 
         }
 
         .stat-box {
@@ -434,15 +433,20 @@
             canvas.height = window.innerHeight;
             const minDim = Math.min(canvas.width, canvas.height);
             bubbleSize = minDim < 500 ? 50 : 60;
-            padding = minDim < 500 ? 10 : 15;
-            const cols = Math.floor(canvas.width / (bubbleSize + padding));
-            const rows = Math.floor(canvas.height / (bubbleSize + padding)) - 3;
-            const startX = (canvas.width - (cols * (bubbleSize + padding) - padding)) / 2;
-            // 로고와 헤더 공간 확보를 위해 startY를 더 밑으로 조정
-            const startY = (canvas.height - (rows * (bubbleSize + padding) - padding)) / 2 + 80;
+            padding = minDim < 500 ? 8 : 12; // 패딩을 살짝 줄임
             
-            // 보드 스탯의 위치를 그리드 바로 위로 동적 이동
-            boardStats.style.top = `${startY - 55}px`;
+            const cols = Math.floor(canvas.width / (bubbleSize + padding));
+            // rows 계산 시 여백 차감을 줄여서 칸을 더 많이 생성 (기존 -3에서 -2로 변경)
+            const rows = Math.floor(canvas.height / (bubbleSize + padding)) - 2;
+            
+            const totalBoardHeight = rows * (bubbleSize + padding) - padding;
+            const startX = (canvas.width - (cols * (bubbleSize + padding) - padding)) / 2;
+            
+            // startY 여백을 80에서 30으로 줄여 최상단 라인과 가깝게 배치
+            const startY = (canvas.height - totalBoardHeight) / 2 + 30;
+            
+            // 보드 스탯의 위치를 그리드 바로 위(약 45px 위)로 조정
+            boardStats.style.top = `${startY - 45}px`;
 
             bubbles = [];
             let index = 0;
