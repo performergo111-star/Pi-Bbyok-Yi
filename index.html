@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Pixel Pop-It: Piko's Bonus!</title>
+    <!-- 모바일 전체화면 설정 -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --primary: #00f2ff;
+            --secondary: #ff007f;
+            --accent: #bcff00;
+            --lavender: #E6E6FA;
+            --piko-color: #ffcc00;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            font-family: 'Courier New', Courier, monospace;
+            /* 모바일 텍스트 선택 및 하이라이트 방지 */
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        canvas {
+            image-rendering: pixelated; /* 픽셀 아트 스타일 유지 */
+            cursor: pointer;
+            touch-action: none; /* 브라우저 기본 제스처 방지 */
+            max-width: 100%;
+            max-height: 100%;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: env(safe-area-inset-top, 20px);
+            left: 0;
+            right: 0;
+            pointer-events: none;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding: 0 20px;
+            z-index: 10;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+
+        .stat-box {
+            background: rgba(0, 0, 0, 0.8);
+            border: 3px solid var(--primary);
+            padding: 8px 15px;
+            color: white;
+            text-shadow: 2px 2px #000;
+            font-size: 18px;
+            font-weight: bold;
+            min-width: 100px;
+            text-align: center;
+            box-shadow: 4px 4px 0px #000;
+        }
+
+        #timer { border-color: var(--secondary); color: var(--secondary); }
+        #score { border-color: var(--primary); color: var(--primary); }
+
+        .modal {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #222;
+            border: 6px solid var(--primary);
+            padding: 30px;
+            text-align: center;
+            z-index: 100;
+            box-shadow: 10px 10px 0px #000;
+            color: white;
+            width: 85%;
+            max-width: 380px;
+        }
+
+        .modal h1 {
+            font-size: 32px;
+            margin: 0 0 10px 0;
+            color: var(--primary);
+            text-shadow: 3px 3px var(--secondary);
+        }
+
+        .pixel-btn {
+            padding: 15px 40px;
+            background: var(--primary);
+            color: #000;
+            border: none;
+            font-family: inherit;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 4px 4px 0px #000;
+            display: inline-block;
+            margin-top: 10px;
+        }
+
+        .instruction-item {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .icon-piko {
+            width: 16px;
+            height: 16px;
+            background: var(--piko-color);
+            border: 2px solid #000;
+        }
+
+        @keyframes shake {
+            0% { transform: translate(2px, 2px); }
+            50% { transform: translate(-2px, -2px); }
+            100% { transform: translate(0, 0); }
+        }
+
+        .shaking { animation: shake 0.1s linear 1; }
+    </style>
+</head>
+<body>
+
+    <div id="ui-layer">
+        <div id="score" class="stat-box">SCORE: 0</div>
+        <div id="timer" class="stat-box">TIME: 30</div>
+    </div>
+
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        
+        <!-- 시작 화면 -->
+        <div id="start-modal" class="modal">
+            <h1>PIXEL POP!</h1>
+            <p>30s Piko Challenge</p>
+            <div class="instruction-item">
+                <div class="icon-piko"></div>
+                <span>Catch Piko: <b style="color:var(--accent)">500 pts</b></span>
+            </div>
+            <div class="instruction-item">
+                <span>Normal Pop: 100 pts</span>
+            </div>
+            <button class="pixel-btn" onclick="startGame()">START</button>
+        </div>
+
+        <!-- 결과 화면 -->
+        <div id="game-over-modal" class="modal">
+            <h2 style="color:var(--secondary)">TIME UP!</h2>
+            <p id="final-score">Final Score: 0</p>
+            <button class="pixel-btn" onclick="startGame()">RETRY</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const container = document.getElementById('game-container');
+        const uiLayer = document.getElementById('ui-layer');
+        const scoreEl = document.getElementById('score');
+        const timerEl = document.getElementById('timer');
+        const startModal = document.getElementById('start-modal');
+        const gameOverModal = document.getElementById('game-over-modal');
+        const finalScoreEl = document.getElementById('final-score');
+
+        let bubbles = [];
+        let particles = [];
+        let floatingTexts = [];
+        let bubbleSize = 60;
+        let padding = 15;
+        let score = 0;
+        let timeLeft = 30;
+        let isGameRunning = false;
+        let timerInterval;
+
+        const piko = {
+            currentBubbleIndex: 0,
+            x: 0,
+            y: 0,
+            targetX: 0,
+            targetY: 0
+        };
+
+        const COLORS = {
+            bubble: '#00f2ff',
+            bubbleDark: '#00a3ad',
+            bubbleLight: '#ffffff',
+            popped: '#2a2a2a',
+            particle: ['#E6E6FA', '#D8BFD8', '#BA55D3', '#9370DB'] // 라벤더 계열 이펙트
+        };
+
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.vx = (Math.random() - 0.5) * 16;
+                this.vy = (Math.random() - 0.5) * 16;
+                this.size = Math.random() * 6 + 2;
+                this.color = color;
+                this.life = 1.0;
+                this.decay = Math.random() * 0.03 + 0.02;
+            }
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.vy += 0.35;
+                this.life -= this.decay;
+            }
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.globalAlpha = this.life;
+                ctx.fillRect(Math.floor(this.x), Math.floor(this.y), this.size, this.size);
+                ctx.globalAlpha = 1.0;
+            }
+        }
+
+        class FloatingText {
+            constructor(x, y, text, color = "rgba(230, 230, 250, ") {
+                this.x = x;
+                this.y = y;
+                this.life = 1.0;
+                this.text = text;
+                this.colorBase = color;
+            }
+            update() {
+                this.y -= 2;
+                this.life -= 0.04;
+            }
+            draw() {
+                ctx.font = "bold 24px 'Courier New'";
+                ctx.fillStyle = `${this.colorBase}${this.life})`;
+                ctx.textAlign = "center";
+                ctx.fillText(this.text, this.x, this.y);
+            }
+        }
+
+        class Bubble {
+            constructor(x, y, index) {
+                this.x = x;
+                this.y = y;
+                this.index = index;
+                this.isPopped = false;
+            }
+            draw() {
+                if (!this.isPopped) {
+                    ctx.fillStyle = COLORS.bubbleDark;
+                    ctx.fillRect(this.x + 4, this.y + 4, bubbleSize, bubbleSize);
+                    ctx.fillStyle = COLORS.bubble;
+                    ctx.fillRect(this.x, this.y, bubbleSize, bubbleSize);
+                    ctx.fillStyle = COLORS.bubbleLight;
+                    ctx.fillRect(this.x + 4, this.y + 4, 8, 8);
+                    ctx.strokeStyle = '#000';
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(this.x, this.y, bubbleSize, bubbleSize);
+                } else {
+                    ctx.fillStyle = COLORS.popped;
+                    ctx.fillRect(this.x + 4, this.y + 4, bubbleSize - 8, bubbleSize - 8);
+                    ctx.strokeStyle = '#333';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(this.x, this.y, bubbleSize, bubbleSize);
+                }
+            }
+            contains(mx, my) {
+                return isGameRunning && !this.isPopped && mx >= this.x && mx <= this.x + bubbleSize && my >= this.y && my <= this.y + bubbleSize;
+            }
+            pop() {
+                this.isPopped = true;
+                const isBonus = (piko.currentBubbleIndex === this.index);
+                const points = isBonus ? 500 : 100;
+                score += points;
+                scoreEl.textContent = `SCORE: ${score}`;
+                
+                container.classList.remove('shaking');
+                void container.offsetWidth;
+                container.classList.add('shaking');
+
+                for (let i = 0; i < 20; i++) {
+                    particles.push(new Particle(this.x + bubbleSize / 2, this.y + bubbleSize / 2, COLORS.particle[Math.floor(Math.random() * COLORS.particle.length)]));
+                }
+                
+                if(isBonus) {
+                    floatingTexts.push(new FloatingText(this.x + bubbleSize / 2, this.y, "BONUS +500!", "rgba(188, 255, 0, "));
+                    movePiko();
+                } else {
+                    floatingTexts.push(new FloatingText(this.x + bubbleSize / 2, this.y, "+100"));
+                }
+
+                if (bubbles.every(b => b.isPopped)) {
+                    score += 1000;
+                    floatingTexts.push(new FloatingText(canvas.width / 2, canvas.height / 2, "BOARD CLEAR!", "rgba(0, 242, 255, "));
+                    setTimeout(resetBubbles, 400);
+                }
+            }
+        }
+
+        function drawPiko() {
+            if (!isGameRunning) return;
+            piko.x += (piko.targetX - piko.x) * 0.15;
+            piko.y += (piko.targetY - piko.y) * 0.15;
+            const bounce = Math.abs(Math.sin(Date.now() * 0.01)) * 8;
+            const px = piko.x + bubbleSize / 2;
+            const py = piko.y + bubbleSize / 2 - 10 - bounce;
+
+            ctx.save();
+            ctx.fillStyle = "#ffcc00"; 
+            ctx.fillRect(px - 12, py - 12, 24, 24);
+            ctx.strokeStyle = "#000";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(px - 12, py - 12, 24, 24);
+            ctx.fillStyle = "#000";
+            ctx.fillRect(px - 6, py - 4, 4, 4);
+            ctx.fillRect(px + 2, py - 4, 4, 4);
+            ctx.restore();
+        }
+
+        function movePiko() {
+            const activeBubbles = bubbles.filter(b => !b.isPopped);
+            if (activeBubbles.length > 0) {
+                const targetBubble = activeBubbles[Math.floor(Math.random() * activeBubbles.length)];
+                piko.currentBubbleIndex = targetBubble.index;
+                piko.targetX = targetBubble.x;
+                piko.targetY = targetBubble.y;
+            }
+        }
+
+        function resetBubbles() {
+            bubbles.forEach(b => b.isPopped = false);
+            movePiko();
+        }
+
+        function setupGrid() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            const minDim = Math.min(canvas.width, canvas.height);
+            bubbleSize = minDim < 500 ? 50 : 60;
+            padding = minDim < 500 ? 10 : 15;
+            const cols = Math.floor(canvas.width / (bubbleSize + padding));
+            const rows = Math.floor(canvas.height / (bubbleSize + padding)) - 1;
+            const startX = (canvas.width - (cols * (bubbleSize + padding) - padding)) / 2;
+            const startY = (canvas.height - (rows * (bubbleSize + padding) - padding)) / 2 + 40;
+            bubbles = [];
+            let index = 0;
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    bubbles.push(new Bubble(startX + c * (bubbleSize + padding), startY + r * (bubbleSize + padding), index++));
+                }
+            }
+            movePiko();
+            piko.x = piko.targetX; piko.y = piko.targetY;
+        }
+
+        function startGame() {
+            isGameRunning = true;
+            score = 0; timeLeft = 30;
+            particles = []; floatingTexts = [];
+            scoreEl.textContent = `SCORE: ${score}`;
+            timerEl.textContent = `TIME: ${timeLeft}`;
+            startModal.style.display = 'none';
+            gameOverModal.style.display = 'none';
+            uiLayer.style.opacity = '1';
+            setupGrid();
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                if (timeLeft > 0) {
+                    timeLeft--;
+                    timerEl.textContent = `TIME: ${timeLeft}`;
+                    if (timeLeft % 1.5 === 0) movePiko();
+                } else { endGame(); }
+            }, 1000);
+        }
+
+        function endGame() {
+            isGameRunning = false;
+            clearInterval(timerInterval);
+            finalScoreEl.textContent = `Final Score: ${score}`;
+            gameOverModal.style.display = 'block';
+            uiLayer.style.opacity = '0.3';
+        }
+
+        function handleInput(e) {
+            if (!isGameRunning) return;
+            const rect = canvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            const mx = (clientX - rect.left) * (canvas.width / rect.width);
+            const my = (clientY - rect.top) * (canvas.height / rect.height);
+            bubbles.forEach(b => { if (b.contains(mx, my)) b.pop(); });
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            bubbles.forEach(b => b.draw());
+            drawPiko();
+            particles = particles.filter(p => p.life > 0);
+            particles.forEach(p => { p.update(); p.draw(); });
+            floatingTexts = floatingTexts.filter(t => t.life > 0);
+            floatingTexts.forEach(t => { t.update(); t.draw(); });
+            requestAnimationFrame(animate);
+        }
+
+        canvas.addEventListener('mousedown', handleInput);
+        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); handleInput(e); }, { passive: false });
+        window.addEventListener('resize', setupGrid);
+        window.onload = () => { setupGrid(); animate(); };
+    </script>
+</body>
+</html>
