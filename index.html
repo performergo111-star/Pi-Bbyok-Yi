@@ -25,7 +25,6 @@
             overflow: hidden;
             background-color: var(--bg-color);
             font-family: 'Courier New', Courier, monospace;
-            /* 모바일 텍스트 선택 및 하이라이트 방지 */
             user-select: none;
             -webkit-user-select: none;
             -webkit-tap-highlight-color: transparent;
@@ -38,14 +37,14 @@
             display: flex;
             justify-content: center;
             align-items: center;
+            background-color: var(--bg-color);
         }
 
         canvas {
-            image-rendering: pixelated; /* 픽셀 아트 스타일 유지 */
+            image-rendering: pixelated;
             cursor: pointer;
-            touch-action: none; /* 브라우저 기본 제스처 방지 */
-            max-width: 100%;
-            max-height: 100%;
+            touch-action: none;
+            display: block;
         }
 
         #ui-layer {
@@ -55,25 +54,55 @@
             right: 0;
             pointer-events: none;
             display: flex;
-            justify-content: space-around;
+            flex-direction: column;
             align-items: center;
-            padding: 0 20px;
-            z-index: 10;
+            gap: 10px;
+            z-index: 50;
             opacity: 0;
             transition: opacity 0.5s;
+        }
+
+        .top-stats {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            padding: 0 10px;
+        }
+
+        .control-btns {
+            display: flex;
+            gap: 15px;
+            pointer-events: auto;
         }
 
         .stat-box {
             background: rgba(0, 0, 0, 0.8);
             border: 3px solid var(--primary);
-            padding: 8px 15px;
+            padding: 8px 12px;
             color: white;
             text-shadow: 2px 2px #000;
-            font-size: 18px;
+            font-size: 16px;
             font-weight: bold;
-            min-width: 100px;
+            min-width: 90px;
             text-align: center;
             box-shadow: 4px 4px 0px #000;
+        }
+
+        .icon-btn {
+            background: #333;
+            border: 3px solid var(--primary);
+            color: var(--primary);
+            padding: 5px 12px;
+            font-family: inherit;
+            font-weight: bold;
+            font-size: 14px;
+            cursor: pointer;
+            box-shadow: 3px 3px 0px #000;
+        }
+
+        .icon-btn:active {
+            transform: translate(2px, 2px);
+            box-shadow: 1px 1px 0px #000;
         }
 
         #timer { border-color: var(--secondary); color: var(--secondary); }
@@ -93,6 +122,7 @@
             color: white;
             width: 85%;
             max-width: 380px;
+            display: none;
         }
 
         .modal h1 {
@@ -114,6 +144,12 @@
             box-shadow: 4px 4px 0px #000;
             display: inline-block;
             margin-top: 10px;
+            pointer-events: auto;
+        }
+
+        .pixel-btn:active {
+            transform: translate(2px, 2px);
+            box-shadow: 2px 2px 0px #000;
         }
 
         .instruction-item {
@@ -132,6 +168,21 @@
             border: 2px solid #000;
         }
 
+        #pause-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            z-index: 60;
+            justify-content: center;
+            align-items: center;
+            color: var(--primary);
+            font-size: 30px;
+            font-weight: bold;
+            text-shadow: 3px 3px #000;
+            pointer-events: auto;
+        }
+
         @keyframes shake {
             0% { transform: translate(2px, 2px); }
             50% { transform: translate(-2px, -2px); }
@@ -144,15 +195,23 @@
 <body>
 
     <div id="ui-layer">
-        <div id="score" class="stat-box">SCORE: 0</div>
-        <div id="timer" class="stat-box">TIME: 30</div>
+        <div class="top-stats">
+            <div id="score" class="stat-box">SCORE: 0</div>
+            <div id="timer" class="stat-box">TIME: 30</div>
+        </div>
+        <div class="control-btns">
+            <button class="icon-btn" onclick="goHome()">HOME</button>
+            <button id="pause-btn" class="icon-btn" onclick="togglePause()">PAUSE</button>
+        </div>
     </div>
 
     <div id="game-container">
         <canvas id="gameCanvas"></canvas>
         
-        <!-- 시작 화면 -->
-        <div id="start-modal" class="modal">
+        <div id="pause-overlay" onclick="togglePause()">PAUSED</div>
+
+        <!-- 시작 화면 (온보딩) -->
+        <div id="start-modal" class="modal" style="display: block;">
             <h1>PIXEL POP!</h1>
             <p>30s Piko Challenge</p>
             <div class="instruction-item">
@@ -170,6 +229,7 @@
             <h2 style="color:var(--secondary)">TIME UP!</h2>
             <p id="final-score">Final Score: 0</p>
             <button class="pixel-btn" onclick="startGame()">RETRY</button>
+            <button class="pixel-btn" style="background:var(--secondary); color:#fff;" onclick="goHome()">HOME</button>
         </div>
     </div>
 
@@ -183,6 +243,8 @@
         const startModal = document.getElementById('start-modal');
         const gameOverModal = document.getElementById('game-over-modal');
         const finalScoreEl = document.getElementById('final-score');
+        const pauseOverlay = document.getElementById('pause-overlay');
+        const pauseBtn = document.getElementById('pause-btn');
 
         let bubbles = [];
         let particles = [];
@@ -192,14 +254,13 @@
         let score = 0;
         let timeLeft = 30;
         let isGameRunning = false;
+        let isPaused = false;
         let timerInterval;
 
         const piko = {
             currentBubbleIndex: 0,
-            x: 0,
-            y: 0,
-            targetX: 0,
-            targetY: 0
+            x: 0, y: 0,
+            targetX: 0, targetY: 0
         };
 
         const COLORS = {
@@ -207,13 +268,12 @@
             bubbleDark: '#00a3ad',
             bubbleLight: '#ffffff',
             popped: '#2a2a2a',
-            particle: ['#E6E6FA', '#D8BFD8', '#BA55D3', '#9370DB'] // 라벤더 계열 이펙트
+            particle: ['#E6E6FA', '#D8BFD8', '#BA55D3', '#9370DB']
         };
 
         class Particle {
             constructor(x, y, color) {
-                this.x = x;
-                this.y = y;
+                this.x = x; this.y = y;
                 this.vx = (Math.random() - 0.5) * 16;
                 this.vy = (Math.random() - 0.5) * 16;
                 this.size = Math.random() * 6 + 2;
@@ -222,10 +282,8 @@
                 this.decay = Math.random() * 0.03 + 0.02;
             }
             update() {
-                this.x += this.vx;
-                this.y += this.vy;
-                this.vy += 0.35;
-                this.life -= this.decay;
+                this.x += this.vx; this.y += this.vy;
+                this.vy += 0.35; this.life -= this.decay;
             }
             draw() {
                 ctx.fillStyle = this.color;
@@ -237,15 +295,12 @@
 
         class FloatingText {
             constructor(x, y, text, color = "rgba(230, 230, 250, ") {
-                this.x = x;
-                this.y = y;
-                this.life = 1.0;
-                this.text = text;
+                this.x = x; this.y = y;
+                this.life = 1.0; this.text = text;
                 this.colorBase = color;
             }
             update() {
-                this.y -= 2;
-                this.life -= 0.04;
+                this.y -= 2; this.life -= 0.04;
             }
             draw() {
                 ctx.font = "bold 24px 'Courier New'";
@@ -257,8 +312,7 @@
 
         class Bubble {
             constructor(x, y, index) {
-                this.x = x;
-                this.y = y;
+                this.x = x; this.y = y;
                 this.index = index;
                 this.isPopped = false;
             }
@@ -282,7 +336,7 @@
                 }
             }
             contains(mx, my) {
-                return isGameRunning && !this.isPopped && mx >= this.x && mx <= this.x + bubbleSize && my >= this.y && my <= this.y + bubbleSize;
+                return isGameRunning && !isPaused && !this.isPopped && mx >= this.x && mx <= this.x + bubbleSize && my >= this.y && my <= this.y + bubbleSize;
             }
             pop() {
                 this.isPopped = true;
@@ -316,8 +370,10 @@
 
         function drawPiko() {
             if (!isGameRunning) return;
-            piko.x += (piko.targetX - piko.x) * 0.15;
-            piko.y += (piko.targetY - piko.y) * 0.15;
+            if (!isPaused) {
+                piko.x += (piko.targetX - piko.x) * 0.15;
+                piko.y += (piko.targetY - piko.y) * 0.15;
+            }
             const bounce = Math.abs(Math.sin(Date.now() * 0.01)) * 8;
             const px = piko.x + bubbleSize / 2;
             const py = piko.y + bubbleSize / 2 - 10 - bounce;
@@ -356,9 +412,9 @@
             bubbleSize = minDim < 500 ? 50 : 60;
             padding = minDim < 500 ? 10 : 15;
             const cols = Math.floor(canvas.width / (bubbleSize + padding));
-            const rows = Math.floor(canvas.height / (bubbleSize + padding)) - 1;
+            const rows = Math.floor(canvas.height / (bubbleSize + padding)) - 2;
             const startX = (canvas.width - (cols * (bubbleSize + padding) - padding)) / 2;
-            const startY = (canvas.height - (rows * (bubbleSize + padding) - padding)) / 2 + 40;
+            const startY = (canvas.height - (rows * (bubbleSize + padding) - padding)) / 2 + 60;
             bubbles = [];
             let index = 0;
             for (let r = 0; r < rows; r++) {
@@ -372,22 +428,51 @@
 
         function startGame() {
             isGameRunning = true;
+            isPaused = false;
             score = 0; timeLeft = 30;
             particles = []; floatingTexts = [];
             scoreEl.textContent = `SCORE: ${score}`;
             timerEl.textContent = `TIME: ${timeLeft}`;
+            pauseBtn.textContent = "PAUSE";
+            pauseOverlay.style.display = "none";
+            
             startModal.style.display = 'none';
             gameOverModal.style.display = 'none';
             uiLayer.style.opacity = '1';
+            
             setupGrid();
+            startTimer();
+        }
+
+        function startTimer() {
             if (timerInterval) clearInterval(timerInterval);
             timerInterval = setInterval(() => {
-                if (timeLeft > 0) {
+                if (!isPaused && timeLeft > 0) {
                     timeLeft--;
                     timerEl.textContent = `TIME: ${timeLeft}`;
                     if (timeLeft % 1.5 === 0) movePiko();
-                } else { endGame(); }
+                } else if (timeLeft <= 0) {
+                    endGame();
+                }
             }, 1000);
+        }
+
+        function togglePause() {
+            if (!isGameRunning) return;
+            isPaused = !isPaused;
+            pauseOverlay.style.display = isPaused ? "flex" : "none";
+            pauseBtn.textContent = isPaused ? "RESUME" : "PAUSE";
+        }
+
+        function goHome() {
+            isGameRunning = false;
+            isPaused = false;
+            clearInterval(timerInterval);
+            startModal.style.display = "block";
+            gameOverModal.style.display = "none";
+            pauseOverlay.style.display = "none";
+            uiLayer.style.opacity = "0";
+            setupGrid();
         }
 
         function endGame() {
@@ -399,7 +484,7 @@
         }
 
         function handleInput(e) {
-            if (!isGameRunning) return;
+            if (!isGameRunning || isPaused) return;
             const rect = canvas.getBoundingClientRect();
             const clientX = e.touches ? e.touches[0].clientX : e.clientX;
             const clientY = e.touches ? e.touches[0].clientY : e.clientY;
@@ -411,16 +496,28 @@
         function animate() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             bubbles.forEach(b => b.draw());
-            drawPiko();
-            particles = particles.filter(p => p.life > 0);
-            particles.forEach(p => { p.update(); p.draw(); });
-            floatingTexts = floatingTexts.filter(t => t.life > 0);
-            floatingTexts.forEach(t => { t.update(); t.draw(); });
+            
+            if (isGameRunning) {
+                drawPiko();
+                if (!isPaused) {
+                    particles = particles.filter(p => p.life > 0);
+                    particles.forEach(p => { p.update(); p.draw(); });
+                    floatingTexts = floatingTexts.filter(t => t.life > 0);
+                    floatingTexts.forEach(t => { t.update(); t.draw(); });
+                } else {
+                    particles.forEach(p => p.draw());
+                    floatingTexts.forEach(t => t.draw());
+                }
+            }
             requestAnimationFrame(animate);
         }
 
         canvas.addEventListener('mousedown', handleInput);
-        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); handleInput(e); }, { passive: false });
+        canvas.addEventListener('touchstart', (e) => { 
+            if(isGameRunning && !isPaused) e.preventDefault(); 
+            handleInput(e); 
+        }, { passive: false });
+        
         window.addEventListener('resize', setupGrid);
         window.onload = () => { setupGrid(); animate(); };
     </script>
