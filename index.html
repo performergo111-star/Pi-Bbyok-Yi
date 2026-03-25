@@ -47,62 +47,81 @@
             display: block;
         }
 
+        /* UI 레이어 전체 구조 개편 */
         #ui-layer {
             position: absolute;
-            top: env(safe-area-inset-top, 20px);
+            top: 0;
             left: 0;
             right: 0;
+            bottom: 0;
             pointer-events: none;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 10px;
             z-index: 50;
             opacity: 0;
             transition: opacity 0.5s;
         }
 
-        .top-stats {
+        /* 최상단 헤더 (홈, 로고, 일시정지) */
+        .game-header {
+            position: absolute;
+            top: env(safe-area-inset-top, 10px);
+            left: 0;
+            right: 0;
             display: flex;
-            justify-content: space-around;
-            width: 100%;
-            padding: 0 10px;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 15px;
+            pointer-events: none;
         }
 
-        .control-btns {
-            display: flex;
-            gap: 15px;
-            pointer-events: auto;
+        #logo-text {
+            color: var(--accent);
+            font-size: 22px;
+            font-weight: 900;
+            text-shadow: 3px 3px #000;
+            letter-spacing: 1px;
         }
 
-        .stat-box {
-            background: rgba(0, 0, 0, 0.8);
-            border: 3px solid var(--primary);
-            padding: 8px 12px;
-            color: white;
-            text-shadow: 2px 2px #000;
-            font-size: 16px;
-            font-weight: bold;
-            min-width: 90px;
-            text-align: center;
-            box-shadow: 4px 4px 0px #000;
-        }
-
-        .icon-btn {
+        .header-btn {
             background: #333;
             border: 3px solid var(--primary);
             color: var(--primary);
-            padding: 5px 12px;
+            padding: 8px 12px;
             font-family: inherit;
             font-weight: bold;
             font-size: 14px;
             cursor: pointer;
             box-shadow: 3px 3px 0px #000;
+            pointer-events: auto;
         }
 
-        .icon-btn:active {
+        .header-btn:active {
             transform: translate(2px, 2px);
             box-shadow: 1px 1px 0px #000;
+        }
+
+        /* 게임 보드 직상단 스탯 (점수, 타이머) */
+        .board-stats {
+            position: absolute;
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            pointer-events: none;
+            /* setupGrid에서 계산된 startY 값에 맞춰 JS에서 동적으로 위치 조정 예정이나, 기본적으로 중앙 상단 배치 */
+            top: 80px; 
+        }
+
+        .stat-box {
+            background: rgba(0, 0, 0, 0.8);
+            border: 3px solid var(--primary);
+            padding: 6px 12px;
+            color: white;
+            text-shadow: 2px 2px #000;
+            font-size: 16px;
+            font-weight: bold;
+            min-width: 100px;
+            text-align: center;
+            box-shadow: 4px 4px 0px #000;
         }
 
         #timer { border-color: var(--secondary); color: var(--secondary); }
@@ -171,15 +190,15 @@
         #pause-overlay {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.5);
+            background: rgba(0,0,0,0.7);
             display: none;
             z-index: 60;
             justify-content: center;
             align-items: center;
             color: var(--primary);
-            font-size: 30px;
+            font-size: 36px;
             font-weight: bold;
-            text-shadow: 3px 3px #000;
+            text-shadow: 4px 4px #000;
             pointer-events: auto;
         }
 
@@ -195,13 +214,17 @@
 <body>
 
     <div id="ui-layer">
-        <div class="top-stats">
+        <!-- 최상단 헤더 영역 -->
+        <div class="game-header">
+            <button class="header-btn" onclick="goHome()">HOME</button>
+            <div id="logo-text">Pi_BbyokYi</div>
+            <button id="pause-btn" class="header-btn" onclick="togglePause()">PAUSE</button>
+        </div>
+        
+        <!-- 게임 보드 바로 위 스탯 영역 -->
+        <div id="board-stats" class="board-stats">
             <div id="score" class="stat-box">SCORE: 0</div>
             <div id="timer" class="stat-box">TIME: 30</div>
-        </div>
-        <div class="control-btns">
-            <button class="icon-btn" onclick="goHome()">HOME</button>
-            <button id="pause-btn" class="icon-btn" onclick="togglePause()">PAUSE</button>
         </div>
     </div>
 
@@ -238,6 +261,7 @@
         const ctx = canvas.getContext('2d');
         const container = document.getElementById('game-container');
         const uiLayer = document.getElementById('ui-layer');
+        const boardStats = document.getElementById('board-stats');
         const scoreEl = document.getElementById('score');
         const timerEl = document.getElementById('timer');
         const startModal = document.getElementById('start-modal');
@@ -412,9 +436,14 @@
             bubbleSize = minDim < 500 ? 50 : 60;
             padding = minDim < 500 ? 10 : 15;
             const cols = Math.floor(canvas.width / (bubbleSize + padding));
-            const rows = Math.floor(canvas.height / (bubbleSize + padding)) - 2;
+            const rows = Math.floor(canvas.height / (bubbleSize + padding)) - 3;
             const startX = (canvas.width - (cols * (bubbleSize + padding) - padding)) / 2;
-            const startY = (canvas.height - (rows * (bubbleSize + padding) - padding)) / 2 + 60;
+            // 로고와 헤더 공간 확보를 위해 startY를 더 밑으로 조정
+            const startY = (canvas.height - (rows * (bubbleSize + padding) - padding)) / 2 + 80;
+            
+            // 보드 스탯의 위치를 그리드 바로 위로 동적 이동
+            boardStats.style.top = `${startY - 55}px`;
+
             bubbles = [];
             let index = 0;
             for (let r = 0; r < rows; r++) {
